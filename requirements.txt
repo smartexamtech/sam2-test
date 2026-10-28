@@ -1,0 +1,9 @@
+sqlalchemy
+pymysql
+boto3
+python-dotenv
+opencv-python
+numpy
+torch>=2.5.1
+torchvision
+git+https://github.com/facebookresearch/sam2.git
