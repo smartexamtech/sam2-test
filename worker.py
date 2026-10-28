@@ -2,6 +2,7 @@ import os
 import cv2
 import uuid
 import boto3
+import subprocess  # <--- Added for auto-shutdown
 from sqlalchemy import create_engine, Column, String, Integer, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
@@ -11,7 +12,8 @@ load_dotenv()
 # ==========================================
 # 1. Database Setup
 # ==========================================
-DB_URL = f"mysql+pymysql://{os.getenv('DB_USER', 'root')}:{os.getenv('DB_PASS', 'root')}@{os.getenv('DB_HOST', 'localhost')}/{os.getenv('DB_NAME', 'studio_db')}"
+# Changed fallbacks to use 'admin' instead of 'root' for RDS compatibility
+DB_URL = f"mysql+pymysql://{os.getenv('DB_USER', 'admin')}:{os.getenv('DB_PASS')}@{os.getenv('DB_HOST')}/{os.getenv('DB_NAME', 'studio_db')}"
 engine = create_engine(DB_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -41,7 +43,7 @@ class ExtractedCharacter(Base):
 # ==========================================
 s3_client = boto3.client(
     's3',
-    region_name=os.getenv("AWS_REGION", "us-east-1"),
+    region_name=os.getenv("AWS_REGION", "ap-south-1"),
     aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
     aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
 )
@@ -139,3 +141,7 @@ def process_queue():
 
 if __name__ == "__main__":
     process_queue()
+    
+    # Auto-shutdown the instance
+    print("\n🛑 Shutting down the instance to save money...")
+    subprocess.run(["sudo", "shutdown", "-h", "now"])
