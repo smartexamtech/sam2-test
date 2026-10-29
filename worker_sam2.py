@@ -80,7 +80,7 @@ def extract_characters_real(video_url, project_id):
     
     if not ret:
         os.remove(temp_video)
-        return None
+        return []
 
     h, w, _ = first_frame.shape
     center_point = np.array([[w // 2, h // 2]])
@@ -156,40 +156,46 @@ def process_queue():
             project.message = "SAM 2 is extracting characters..."
             db.commit()
             
-            # FIXED: Get the LATEST uploaded video (in case they retried with a new one)
-            video = db.query(ReferenceVideo).filter(ReferenceVideo.project_id == project.id).order_by(ReferenceVideo.id.desc()).first()
+            # FETCH ALL VIDEOS FOR THIS PROJECT
+            videos = db.query(ReferenceVideo).filter(ReferenceVideo.project_id == project.id).all()
             
-            if not video:
+            if not videos:
                 project.status = "EXTRACTION_ERROR"
-                project.message = "No reference video found."
+                project.message = "No reference videos found."
                 db.commit()
                 continue
                 
-            try:
-                urls = extract_characters_real(video.file_path, project.id)
+            all_urls = []
+            
+            # PROCESS EACH VIDEO
+            for video in videos:
+                try:
+                    urls = extract_characters_real(video.file_path, project.id)
+                    if urls:
+                        all_urls.extend(urls)
+                except Exception as e:
+                    print(f"❌ Error processing {video.file_path}: {e}")
+                    # We don't fail the whole project if one video fails, 
+                    # we just continue to the next one.
+                    continue
                 
-                if urls:
-                    for i, url in enumerate(urls):
-                        new_char = ExtractedCharacter(
-                            id=str(uuid.uuid4()),
-                            project_id=project.id,
-                            file_path=url,
-                            character_index=i + 1
-                        )
-                        db.add(new_char)
-                    
-                    project.status = "EXTRACTION_COMPLETED"
-                    project.message = f"Extracted {len(urls)} character frames."
-                    db.commit()
-                    print(f"✅ Project {project.id} completed!")
-                else:
-                    project.status = "EXTRACTION_ERROR"
-                    project.message = "SAM 2 failed to read video."
-                    db.commit()
-            except Exception as e:
-                print(f"❌ Error: {e}")
+            if all_urls:
+                for i, url in enumerate(all_urls):
+                    new_char = ExtractedCharacter(
+                        id=str(uuid.uuid4()),
+                        project_id=project.id,
+                        file_path=url,
+                        character_index=i + 1
+                    )
+                    db.add(new_char)
+                
+                project.status = "EXTRACTION_COMPLETED"
+                project.message = f"Extracted {len(all_urls)} character frames from {len(videos)} videos."
+                db.commit()
+                print(f"✅ Project {project.id} completed!")
+            else:
                 project.status = "EXTRACTION_ERROR"
-                project.message = str(e)
+                project.message = "SAM 2 failed to read any video."
                 db.commit()
 
     finally:
