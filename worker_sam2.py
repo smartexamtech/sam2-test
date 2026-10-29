@@ -66,7 +66,7 @@ def extract_characters_real(video_url, project_id):
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if device == "cpu":
-        raise Exception("SAM 2 requires a GPU. Please run on AWS instance.")
+        raise Exception("SAM 2 requires a CUDA GPU. Please run on a GPU-enabled instance.")
 
     predictor = build_sam2_video_predictor(model_cfg, checkpoint, device=device)
 
@@ -79,6 +79,7 @@ def extract_characters_real(video_url, project_id):
     cap.release()
     
     if not ret:
+        os.remove(temp_video)
         return None
 
     h, w, _ = first_frame.shape
@@ -155,7 +156,9 @@ def process_queue():
             project.message = "SAM 2 is extracting characters..."
             db.commit()
             
-            video = db.query(ReferenceVideo).filter(ReferenceVideo.project_id == project.id).first()
+            # FIXED: Get the LATEST uploaded video (in case they retried with a new one)
+            video = db.query(ReferenceVideo).filter(ReferenceVideo.project_id == project.id).order_by(ReferenceVideo.id.desc()).first()
+            
             if not video:
                 project.status = "EXTRACTION_ERROR"
                 project.message = "No reference video found."
